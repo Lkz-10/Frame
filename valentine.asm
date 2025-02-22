@@ -16,23 +16,30 @@ Start:
         ;mov dl, 01010001b               ; color
         ;mov dh, 15d                     ; text len
 
-        push si                         ; saving text address
 
+        cmp dh, 0                       ; keeping si safe in case of user's frame style
+        je UserFS                       ;
+
+        push si                         ; saving text address
         mov si, offset FrameStyle       ;
         dec dh                          ;
         mov al, 9d                      ; setting framestyle
         mul dh                          ;
         add si, ax                      ;
 
+        UserFS:
+
         call SetFramePtr                ; calculating the first frame symbol addr
 
         call DrawFrame                  ; drawing frame
 
-        pop si                          ; restoring text address
+        cmp dh, 0                       ;
+        je DontTouchSi                  ;
+        pop si                          ; restoring text address if it was changed
+        DontTouchSi:                    ;
 
-        call StrLen                     ; text len in dh
+        call StrLen                     ; text len in cx
         call SetTextPtr                 ; calculating the text address in video memory
-
         call WriteText                  ; writing the text
 
         mov ax, 4c00h                   ; ending program
@@ -41,7 +48,7 @@ Start:
 ;-----------------------------------------------------------------
 ; Function GetParam gets the frame parameters from cmd
 ; Entry: none
-; Exit:  width in bh, height in bl, color in dl
+; Exit:  width in bh, height in bl, color in dl, frame style in dh
 ; Destr: ax, cx
 ;-----------------------------------------------------------------
 GetParam        proc
@@ -57,7 +64,7 @@ GetParam        proc
                 call AtoI               ; getting color
                 mov dl, cl              ;
 
-                call AtoI               ; getting framestyle
+                call AtoI               ; getting frame style
                 mov dh, cl              ;
 
                 ret
@@ -102,30 +109,30 @@ StrLen          proc
 ;-----------------------------------------------------------------
 AtoI            proc
 
-                xor cx, cx
-                xor ax, ax
+                xor cx, cx              ; ax, cx = 0
+                xor ax, ax              ;
 
         continue:
-                mov ch, ds:[si]
+                mov ch, ds:[si]         ;
+                                        ;
+                cmp ch, "0"             ;
+                jb finish               ; Checking for a number
+                                        ;
+                cmp ch, "9"             ;
+                ja finish               ;
 
-                cmp ch, "0"
-                jb finish
+                mov al, 10d             ;
+                mul cl                  ;
+                add al, ch              ; cl = cl*10 + ch
+                sub al, "0"             ;
+                mov cl, al              ;
 
-                cmp ch, "9"
-                ja finish
-
-                mov al, 10d
-                mul cl
-                add al, ch
-                sub al, "0"
-                mov cl, al
-
-                inc si
-                jmp continue
+                inc si                  ; next symb
+                jmp continue            ;
 
 
         finish:
-                call SkipSpaces
+                call SkipSpaces         ; Spaces skipping
                 ret
                 endp
 
@@ -138,16 +145,17 @@ AtoI            proc
 SkipSpaces      proc
 
         skipping:
-                mov ch, ds:[si]
-                cmp ch, " "
-                jne not_a_space
-                inc si
-                jmp skipping
+                mov ch, ds:[si]         ;
+                cmp ch, " "             ; Checking for space
+                jne not_a_space         ;
+
+                inc si                  ; next symb
+                jmp skipping            ;
 
 
         not_a_space:
-                ret
-                endp
+                ret                     ; finish function
+                endp                    ;
 
 ;-----------------------------------------------------------------
 ; Function SetFramePtr calculates the address of the first frame symbol

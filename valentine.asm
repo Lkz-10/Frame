@@ -1,21 +1,26 @@
 .model tiny
+
+.data
+;-----------------------------------------------------------
+        videoseg        equ     0b800h
+        fs_len          equ     9d
+        exit_cmd        equ     4c00h
+        cmd_args_addr   equ     82h
+        screen_height   equ     15d
+        screen_width    equ     80d
+;-----------------------------------------------------------
+
 .code
 org 100h
 
 Start:
         cld                             ; clear destination flag
 
-        mov bx, 0b800h                  ;
+        mov bx, videoseg                ;
         mov es, bx                      ; videoseg addr
-        mov bx, 0h                      ;
+        xor bx, bx                      ;
 
         call GetParam                   ; getting cmd parameters
-
-        ;mov bh, 50d                     ; frame width
-        ;mov bl, 11d                     ; frame height
-        ;mov dl, 01010001b               ; color
-        ;mov dh, 15d                     ; text len
-
 
         cmp dh, 0                       ; keeping si safe in case of user's frame style
         je UserFS                       ;
@@ -23,7 +28,7 @@ Start:
         push si                         ; saving text address
         mov si, offset FrameStyle       ;
         dec dh                          ;
-        mov al, 9d                      ; setting framestyle
+        mov al, fs_len                  ; setting frame style
         mul dh                          ;
         add si, ax                      ;
 
@@ -42,7 +47,7 @@ Start:
         call SetTextPtr                 ; calculating the text address in video memory
         call WriteText                  ; writing the text
 
-        mov ax, 4c00h                   ; ending program
+        mov ax, exit_cmd                ; ending program
         int 21h                         ;
 
 ;-----------------------------------------------------------------
@@ -53,7 +58,7 @@ Start:
 ;-----------------------------------------------------------------
 GetParam        proc
 
-                mov si, 82h             ; cmd beginning (first space skipped)
+                mov si, cmd_args_addr   ; cmd beginning (first space skipped)
 
                 call AtoI               ; getting width
                 mov bh, cl              ;
@@ -102,7 +107,7 @@ StrLen          proc
 
 
 ;-----------------------------------------------------------------
-; Function AtoI gets nums from cmd
+; Function AtoI gets a number from cmd arguments line
 ; Entry: addr in si
 ; Exit:  number in cl
 ; Destr: ax, cx
@@ -152,7 +157,6 @@ SkipSpaces      proc
                 inc si                  ; next symb
                 jmp skipping            ;
 
-
         not_a_space:
                 ret                     ; finish function
                 endp                    ;
@@ -165,28 +169,27 @@ SkipSpaces      proc
 ;-----------------------------------------------------------------
 SetFramePtr     proc
 
-                mov al, 15d             ;
-                sub al, bl              ;
-                mov ah, 0h              ;
-                                        ;
-                mov cl, 2h              ;
-                div cl                  ; vertical offset ((15 - bl) // 2 * 160)
-                                        ;
-                mov cl, 160d            ;
-                mul cl                  ;
-                                        ;
-                mov di, ax              ;
+                mov al, screen_height           ;
+                sub al, bl                      ;
+                xor ah, ah                      ;
+                                                ;
+                mov cl, 2h                      ;
+                div cl                          ; vertical offset ((15 - bl) // 2 * 160)
+                                                ;
+                mov cl, screen_width * 2h       ;
+                mul cl                          ;
 
-                mov al, 80d             ;
-                sub al, bh              ;
-                mov ah, 0h              ;
-                                        ;
-                mov cl, 2h              ;
-                div cl                  ; horizontal offset ((80 - bh) // 2 * 2)
-                                        ;
-                mul cl                  ;
-                                        ;
-                add di, ax              ;
+                mov di, ax                      ;
+                mov al, screen_width            ;
+                sub al, bh                      ;
+                xor ah, ah                      ;
+                                                ;
+                mov cl, 2h                      ;
+                div cl                          ; horizontal offset ((80 - bh) // 2 * 2)
+                                                ;
+                mul cl                          ;
+                                                ;
+                add di, ax                      ;
 
                 ret
                 endp
@@ -200,34 +203,34 @@ SetFramePtr     proc
 ;---------------------------------------------------------------------------
 SetTextPtr      proc
 
-                push cx                 ; saving text len
-                push cx                 ;
+                push cx                         ; saving text len
+                push cx                         ;
 
-                mov al, bl              ;
-                mov ah, 0h              ;
-                mov cl, 2h              ;
-                div cl                  ;
-                inc al                  ; vertical offset
-                                        ;
-                mov cl, 160d            ;
-                mul cl                  ;
-                                        ;
-                sub di, ax              ;
+                mov al, bl                      ;
+                xor ah, ah                      ;
+                mov cl, 2h                      ;
+                div cl                          ;
+                inc al                          ; vertical offset
+                                                ;
+                mov cl, screen_width * 2h       ;
+                mul cl                          ;
+                                                ;
+                sub di, ax                      ;
 
-                pop cx                  ; restoring text len
+                pop cx                          ; restoring text len
 
-                mov al, bh              ;
-                mov ah, 0h              ;
-                sub ax, cx              ;
-                mov cl, 2h              ;
-                div cl                  ;
-                                        ; horizontal offset
-                mov ah, 0h              ;
-                mul cl                  ;
-                                        ;
-                add di, ax              ;
+                mov al, bh                      ;
+                xor ah, ah                      ;
+                sub ax, cx                      ;
+                mov cl, 2h                      ;
+                div cl                          ;
+                                                ; horizontal offset
+                xor ah, ah                      ;
+                mul cl                          ;
+                                                ;
+                add di, ax                      ;
 
-                pop cx                  ; restoring text len in cx
+                pop cx                          ; restoring text len in cx
 
                 ret
                 endp
@@ -235,7 +238,7 @@ SetTextPtr      proc
 ;-----------------------------------------------------------------
 ; Function DrawFrame draws a centred frame
 ; Entry: frame width in bh, height in bl, first elem addr in di,
-;        bound elems addr in si, color in dl
+;        bound elements addr in si, color in dl
 ; Exit:  none
 ; Destr: ax, cx, di, si
 ;-----------------------------------------------------------------
@@ -243,7 +246,7 @@ DrawFrame       proc
 
                 call DrawLine           ; first line
 
-                mov ch, 0               ;
+                xor ch, ch               ;
                 mov cl, bl              ;
                 sub cx, 2h              ;
                                         ;
@@ -270,30 +273,30 @@ DrawFrame       proc
 ;-----------------------------------------------------------------
 DrawLine        proc
 
-                mov ah, dl              ; color
+                mov ah, dl                      ; color
 
-                lodsb                   ;
-                stosw                   ; left elem
+                lodsb                           ;
+                stosw                           ; left elem
 
-                mov ch, 0h              ;
-                mov cl, bh              ;
-                sub cx, 2h              ; centre elems
-                                        ;
-                lodsb                   ;
-                rep stosw               ;
+                xor ch, ch                      ;
+                mov cl, bh                      ;
+                sub cx, 2h                      ; centre elements
+                                                ;
+                lodsb                           ;
+                rep stosw                       ;
 
-                lodsb                   ;
-                stosw                   ; right elem
+                lodsb                           ;
+                stosw                           ; right elem
 
-                push ax                 ; saving color
+                push ax                         ; saving color
 
-                add di, 160d            ;
-                mov al, bh              ;
-                mov cl, 2h              ; next line
-                mul cl                  ;
-                sub di, ax              ;
+                add di, screen_width * 2h       ;
+                mov al, bh                      ;
+                mov cl, 2h                      ; next line
+                mul cl                          ;
+                sub di, ax                      ;
 
-                pop ax                  ; restoring color
+                pop ax                          ; restoring color
 
                 ret
                 endp
@@ -306,18 +309,16 @@ DrawLine        proc
 ;---------------------------------------------------------------------
 WriteText       proc
 
-                mov ah, dl
+                mov ah, dl              ; color
 
         write:
-                lodsb
-                stosw
+                lodsb                   ; es:[di] = ds:[si] cx times
+                stosw                   ;
         loop write
 
                 ret
                 endp
 
 FrameStyle db '*-*| |*-*', 201, 205, 187, 186, " ", 186, 200, 205, 188, 3, 3, 3, 3, " ", 3, 3, 3, 3, '123456789'
-
-FrameText   db 'Zenit champion!'
 
 end Start
